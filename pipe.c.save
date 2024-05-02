@@ -1,0 +1,18 @@
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+
+int main(){
+	int pipedes[2];
+	int returnstatus;
+	returnstatus=pipe(pipedes);
+	if(returnstatus==-1){
+		printf("Unable to create pipe\n");
+
+}
+	char writemessages[2][20]={"hi","aadi"};
+	char readmessage[20];
+	printf("writing to pipe: message 1 is %s",writemessages[0]
+
+}
