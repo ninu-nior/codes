@@ -1,0 +1,3 @@
+gcc rounded_buffer.c -o rounded_buffer -pthread -lrt
+gcc rw.c -o rw -pthread
+
