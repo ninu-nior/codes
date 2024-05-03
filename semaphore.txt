@@ -1,0 +1,356 @@
+A Semaphore is an integer variable, shared among multiple processes. The
+main aim of using a semaphore is process synchronization and access control
+for a common resource in a concurrent environment.
+Semaphores are of two types:
+Binary Semaphore - This is also known as mutex lock. It can have only
+two values – 0 and 1. Its value is initialized to 1. It is used to implement
+the solution of critical section problems with multiple processes.
+Counting Semaphore - Its value can range over an unrestricted domain. It
+is used to control access to a resource that has multiple instances.
+To perform synchronization using semaphores, following are the steps :
+Create a semaphore or connect to an already existing semaphore
+(semget())
+Perform operations on the semaphore i.e., allocate or release or wait for
+the resources (semop())
+Perform control operations on the message queue (semctl())
+Dr. Pradeep K V CSE1004 - Network Programming 59/ 101
+IPC - Semaphore II
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+int semget(key_t key, int nsems, int semflg)
+int semop(int semid, struct sembuf *semops, size_t nsemops)
+int semctl(int semid, int semnum, int cmd, ...)
+Where,
+key - recognizes the message queue.
+nsems - specifies the number of semaphores.
+semflg - IPC_CREAT, IPC_EXCL
+semid - identifier created by semget()
+semops - is the pointer to an array of operations to be performed
+on the semaphore set.
+struct sembuf {
+unsigned short sem_num; /* Semaphore set num */
+short sem_op; /* Semaphore operation */
+short sem_flg; /* Operation flags, IPC_NOWAIT, SEM_UNDO */
+};
+Dr. Pradeep K V CSE1004 - Network Programming 60/ 101
+IPC - Semaphore III
+semnum - is the number of semaphore
+cmd - to perform the required control operation
+union semun {
+int val; /* val for SETVAL */
+struct semid_ds *buf; /* Buffer for IPC_STAT and IPC_SET */
+unsigned short *array; /* Buffer for GETALL and SETALL */
+struct seminfo *__buf; /* Buffer for IPC_INFO and SEM_INFO*/
+};
+struct semid_ds {
+struct ipc_perm sem_perm; /* Permissions */
+time_t sem_otime; /* Last semop time */
+time_t sem_ctime; /* Last change time */
+unsigned long sem_nsems; /* Number of semaphores */
+};
+Dr. Pradeep K V CSE1004 - Network Programming 61/ 101
+IPC - Semaphore IV
+/* Filename: shm_write_cntr.c */
+#include <stdio.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/types.h>
+#include <string.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#define SHM_KEY 0x12345
+struct shmseg {
+int cntr, write_complete, read_complete;
+};
+void shared_memory_cntr_increment(int pid, struct shmseg *shmp,
+int total_count);
+Dr. Pradeep K V CSE1004 - Network Programming 62/ 101
+IPC - Semaphore V
+int main(int argc, char *argv[]) {
+int shmid, total_count, sleep_time;
+struct shmseg *shmp;
+char *bufptr;
+pid_t pid;
+if (argc != 2)
+total_count = 10000;
+else {
+total_count = atoi(argv[1]);
+if (total_count < 10000) total_count = 10000;
+}
+printf("Total Count is %d\n", total_count);
+shmid = shmget(SHM_KEY, sizeof(struct shmseg), 0644|IPC_CREAT);
+if (shmid == -1) { perror("Shared memory"); return 1; }
+// Attach to the segment to get a pointer to it.
+shmp = shmat(shmid, NULL, 0);
+if (shmp == (void *) -1) {
+perror("Shared memory attach"); return 1; }
+Dr. Pradeep K V CSE1004 - Network Programming 63/ 101
+IPC - Semaphore VI
+shmp->cntr = 0;
+pid = fork();
+/* Parent Process - Writing Once */
+if (pid > 0) {
+shared_memory_cntr_increment(pid, shmp, total_count);
+} else if (pid == 0) {
+shared_memory_cntr_increment(pid, shmp, total_count);
+return 0;
+} else {
+perror("Fork Failure\n");
+return 1;
+}
+while (shmp->read_complete != 1)
+sleep(1);
+if (shmdt(shmp) == -1) {
+perror("shmdt");
+return 1;
+}
+Dr. Pradeep K V CSE1004 - Network Programming 64/ 101
+IPC - Semaphore VII
+if (shmctl(shmid, IPC_RMID, 0) == -1) {
+perror("shmctl");
+return 1;
+}
+printf("Writing Process: Complete\n");
+return 0;
+}
+// Increment the counter of shared memory by total_count in steps of 1
+void shared_memory_cntr_increment(int pid, struct shmseg *shmp,
+int total_count) {
+int cntr, numtimes, sleep_time;
+cntr = shmp->cntr;
+shmp->write_complete = 0;
+if (pid == 0)
+printf("SHM_WRITE: CHILD: Now writing\n");
+else if (pid > 0)
+printf("SHM_WRITE: PARENT: Now writing\n");
+//printf("SHM_CNTR is %d\n", shmp->cntr);
+Dr. Pradeep K V CSE1004 - Network Programming 65/ 101
+IPC - Semaphore VIII
+// Increment the counter in shared memory by total_count in steps of 1
+for (numtimes = 0; numtimes < total_count; numtimes++) {
+cntr += 1;
+shmp->cntr = cntr;
+/* Sleeping for a second for every thousand */
+sleep_time = cntr % 1000;
+if (sleep_time == 0)
+sleep(1);
+}
+shmp->write_complete = 1;
+if (pid == 0)
+printf("SHM_WRITE: CHILD: Writing Done\n");
+else if (pid > 0)
+printf("SHM_WRITE: PARENT: Writing Done\n");
+return;
+}
+Dr. Pradeep K V CSE1004 - Network Programming 66/ 101
+IPC - Semaphore IX
+/* Filename: shm_read_cntr.c */
+#include <stdio.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/types.h>
+#include <string.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <unistd.h>
+#define SHM_KEY 0x12345
+struct shmseg {
+int cntr, write_complete, read_complete;
+};
+int main(int argc, char *argv[]) {
+int shmid, numtimes;
+struct shmseg *shmp;
+int total_count, cntr, sleep_time;
+Dr. Pradeep K V CSE1004 - Network Programming 67/ 101
+IPC - Semaphore X
+if (argc != 2)
+total_count = 10000;
+else {
+total_count = atoi(argv[1]);
+if (total_count < 10000)
+total_count = 10000;
+}
+shmid = shmget(SHM_KEY, sizeof(struct shmseg), 0644|IPC_CREAT);
+if (shmid == -1) {
+perror("Shared memory");
+return 1;
+}
+// Attach to the segment to get a pointer to it.
+shmp = shmat(shmid, NULL, 0);
+if (shmp == (void *) -1) {
+perror("Shared memory attach");
+return 1;
+}
+Dr. Pradeep K V CSE1004 - Network Programming 68/ 101
+IPC - Semaphore XI
+/* Read the shared memory cntr and print it on standard output */
+while (shmp->write_complete != 1) {
+if (shmp->cntr == -1) {
+perror("read");
+return 1;
+}
+sleep(3);
+}
+printf("Reading Process: Shared Memory: Counter is %d\n",
+shmp->cntr);
+printf("Reading Process: Reading Done, Detaching Shared Memory\n");
+shmp->read_complete = 1;
+if (shmdt(shmp) == -1) {
+perror("shmdt"); return 1; }
+printf("Reading Process: Complete\n");
+return 0;
+}
+Look at output, the counter should be 20000, however, since before completion
+of one process task other process is also processing in parallel, the counter
+value is not as expected. The output would vary from system to system and
+also it would vary with each execution. To ensure the two processes perform
+the task after completion of one task, it should be implemented using
+synchronization mechanisms.
+/* Filename: shm_write_cntr_with_sem.c */
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/sem.h>
+#include <string.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+Dr. Pradeep K V CSE1004 - Network Programming 71/ 101
+IPC - Semaphore XIV
+#define SHM_KEY 0x12345
+#define SEM_KEY 0x54321
+#define MAX_TRIES 20
+struct shmseg {
+int cntr, write_complete, read_complete;
+};
+void shared_memory_cntr_increment(int, struct shmseg*, int);
+void remove_semaphore();
+int main(int argc, char *argv[]) {
+int shmid, total_count, sleep_time;
+struct shmseg *shmp;
+char *bufptr;
+pid_t pid;
+if (argc != 2) total_count = 10000;
+else {
+total_count = atoi(argv[1]);
+if (total_count < 10000) total_count = 10000;
+}
+Dr. Pradeep K V CSE1004 - Network Programming 72/ 101
+IPC - Semaphore XV
+printf("Total Count is %d\n", total_count);
+shmid = shmget(SHM_KEY, sizeof(struct shmseg), 0644|IPC_CREAT);
+if (shmid == -1) { perror("Shared memory"); return 1; }
+// Attach to the segment to get a pointer to it.
+shmp = shmat(shmid, NULL, 0);
+if (shmp == (void *) -1) {
+perror("Shared memory attach: ");
+return 1;
+}
+shmp->cntr = 0;
+pid = fork(); /* Parent Process - Writing Once */
+if (pid > 0) shared_memory_cntr_increment(pid, shmp, total_count);
+else if (pid == 0) {
+shared_memory_cntr_increment(pid, shmp, total_count);
+return 0;
+}
+Dr. Pradeep K V CSE1004 - Network Programming 73/ 101
+IPC - Semaphore XVI
+else { perror("Fork Failure\n"); return 1; }
+while (shmp->read_complete != 1)
+sleep(1);
+if (shmdt(shmp) == -1) {
+perror("shmdt");
+return 1;
+}
+if (shmctl(shmid, IPC_RMID, 0) == -1) {
+perror("shmctl");
+return 1;
+}
+printf("Writing Process: Complete\n");
+remove_semaphore();
+return 0;
+}
+Dr. Pradeep K V CSE1004 - Network Programming 74/ 101
+IPC - Semaphore XVII
+/* Increment the counter of shared memory by total_count in steps of 1 */
+void shared_memory_cntr_increment(int pid,
+struct shmseg *shmp, int total_count) {
+int cntr, numtimes, sleep_time, semid, tries, retval;
+struct sembuf sem_buf;
+struct semid_ds buf;
+semid = semget(SEM_KEY, 1, IPC_CREAT | IPC_EXCL | 0666);
+//printf("errno is %d and semid is %d\n", errno, semid);
+/* Got the semaphore */
+if (semid >= 0) {
+printf("First Process\n");
+sem_buf.sem_op = 1; sem_buf.sem_flg = 0;
+sem_buf.sem_num = 0;
+retval = semop(semid, &sem_buf, 1);
+if (retval == -1) {
+perror("Semaphore Operation: "); return;
+}
+}
+Dr. Pradeep K V CSE1004 - Network Programming 75/ 101
+IPC - Semaphore XVIII
+else if (errno == EEXIST) { // Already other process got it
+int ready = 0;
+printf("Second Process\n");
+semid = semget(SEM_KEY, 1, 0);
+if (semid < 0) { perror("Semaphore GET: "); return; }
+/* Waiting for the resource */
+sem_buf.sem_num = 0;
+sem_buf.sem_op = 0;
+sem_buf.sem_flg = SEM_UNDO;
+retval = semop(semid, &sem_buf, 1);
+if (retval == -1) { perror("Semaphore Locked: "); return; }
+}
+sem_buf.sem_num = 0;
+sem_buf.sem_op = -1; /* Allocating the resources */
+sem_buf.sem_flg = SEM_UNDO;
+retval = semop(semid, &sem_buf, 1);
+if (retval == -1) { perror("Semaphore Locked: "); return; }
+cntr = shmp->cntr;
+Dr. Pradeep K V CSE1004 - Network Programming 76/ 101
+IPC - Semaphore XIX
+shmp->write_complete = 0;
+if (pid == 0) printf("SHM_WRITE: CHILD: Now writing\n");
+else if (pid > 0) printf("SHM_WRITE: PARENT: Now writing\n");
+//printf("SHM_CNTR is %d\n", shmp->cntr);
+/* Increment the counter in shared memory by total_count in steps of 1 */
+for (numtimes = 0; numtimes < total_count; numtimes++) {
+cntr += 1;
+shmp->cntr = cntr;
+/* Sleeping for a second for every thousand */
+sleep_time = cntr % 1000;
+if (sleep_time == 0)
+sleep(1);
+}
+shmp->write_complete = 1;
+sem_buf.sem_op = 1; /* Releasing the resource */
+retval = semop(semid, &sem_buf, 1);
+if (retval == -1) { perror("Semaphore Locked\n"); return; }
+Dr. Pradeep K V CSE1004 - Network Programming 77/ 101
+IPC - Semaphore XX
+if (pid == 0) printf("SHM_WRITE: CHILD: Writing Done\n");
+else if (pid > 0) printf("SHM_WRITE: PARENT: Writing Done\n");
+return;
+}
+void remove_semaphore() {
+int semid, retval;
+semid = semget(SEM_KEY, 1, 0);
+if (semid < 0) {
+perror("Remove Semaphore: Semaphore GET: ");
+return;
+}
+retval = semctl(semid, 0, IPC_RMID);
+if (retval == -1) {
+perror("Remove Semaphore: Semaphore CTL: ");
+return;
+}
+return;
+}

@@ -1,0 +1,78 @@
+Pipes were meant for communication between related processes. Can we use
+pipes for unrelated process communication (Answer = ’No’).
+Name Pipes (FIFOs) are used for unrelated process communication.
+One pipe for one-way communication and two pipes for bi-directional
+communication. Does the same with Named Pipes. (Answer = ’No’).
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+int mknod(const char *pathname, mode_t mode, dev_t dev);
+Where :
+pathname : relative, where it has to be created.
+mode : is the mode of file which specifies the file type
+dev : is to specify device information
+Dr. Pradeep K V CSE1004 - Network Programming 22/ 101
+IPC - Named Pipes / FIFOS II
+Table: File Types
+File Type Description File Type Description
+S_IFBLK block special S_IFREG Regular file
+S_IFCHR character special S_IFDIR Directory
+S_IFIFO FIFO special S_IFLNK Symbolic Link
+Table: File Modes
+File Mode Description File Mode Description
+S_IRWXU Read, write, execute
+/search by owner S_IWGRP Write permission, group
+S_IRUSR Read permission, owner S_IXGRP Execute/search
+permission, group
+S_IWUSR Write permission, owner S_IRWXO Read, write, execute/
+search by others
+S_IXUSR Execute/search
+permission, owner S_IROTH Read permission, others
+S_IRWXG Read, write, execute/
+search by group S_IWOTH Write permission, others
+S_IRGRP Read permission, group S_IXOTH Execute/search
+permission, others
+Dr. Pradeep K V CSE1004 - Network Programming 23/ 101
+IPC - Named Pipes / FIFOS III
+File mode can also be represented in octal notation such as 0XYZ, where X
+represents owner, Y represents group, and Z represents others.
+The value of X, Y or Z can range from 0 to 7. The values for read, write and
+execute are 4, 2, 1 respectively.
+If needed in combination of read, write and execute, then add the values
+accordingly. For Example : 0640, then this means read and write (4 + 2 = 6)
+for owner, read (4) for group and no permissions (0) for others.
+#include <sys/types.h>
+#include <sys/stat.h>
+int mkfifo(const char *pathname, mode_t mode)
+Where :
+pathname : Absolute/Relative (To Create)
+mode : Read/Write/Execute
+Dr. Pradeep K V CSE1004 - Network Programming 24/ 101
+IPC - Named Pipes / FIFOS IV
+Example : Program of running the server on one terminal and running the
+client on another terminal.
+The program would only perform one-way communication. The client accepts
+the user input and sends the message to the server, the server prints the
+message on the output. The process is continued until the user enters the
+string “end”.
+Steps (One-Way Communication) :
+Create two processes, one is fifoserver and another one is fifoclient.
+Server process performs the following -
+Creates a named pipe (using system call mknod()) with name “MYFIFO”, if
+not created.
+Opens the named pipe for read only purposes.
+Here, created FIFO with permissions of read and write for Owner. Read for
+Group and no permissions for Others.
+Waits infinitely for message from the Client.
+If the message received from the client is not “end”, prints the message. If
+the message is “end”, closes the fifo and ends the process.
+Dr. Pradeep K V CSE1004 - Network Programming 25/ 101
+IPC - Named Pipes / FIFOS V
+Client process performs the following -
+Opens the named pipe for write only purposes.
+Accepts the string from the user.
+Checks, if the user enters “end” or other than “end”. Either way, it sends a
+message to the server. However, if the string is “end”, this closes the FIFO
+and also ends the process.
+Repeats infinitely until the user enters string “end”.

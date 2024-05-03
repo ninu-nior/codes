@@ -1,0 +1,258 @@
+A signal is a notification to a process indicating the occurrence of an event.
+Signal is also called software interrupt and is not predictable to know its
+occurrence, hence it is also called an asynchronous event.
+Signal can be specified with a number or a name, usually signal names start
+with SIG. The available signals can be checked with the command kill –l (l for
+Listing signal names), which is as follows -
+Dr. Pradeep K V CSE1004 - Network Programming 80/ 101
+IPC - Signals II
+Whenever a signal is raised (either programmatically or system generated
+signal), a default action is performed.
+What if you don’t want to perform the default action but wish to perform your
+own actions on receiving the signal? Is this possible for all the signals? Yes, it
+is possible to handle the signal but not for all the signals.
+What if you want to ignore the signals, is this possible? Yes, it is possible to
+ignore the signal. Ignoring the signal implies neither performing the default
+action nor handling the signal.
+It is possible to ignore or handle almost all the signals. The signals which can’t
+be either ignored or handled/caught are SIGSTOP and SIGKILL.
+The actions performed for the signals are as follows -
+Default Action
+Handle the signal
+Ignore the signal
+Dr. Pradeep K V CSE1004 - Network Programming 81/ 101
+Signal Handling I
+The signal can be handled altering the execution of default action. Signal
+handling can be done in either of the two ways i.e., through system calls,
+signal() and sigaction().
+#include <signal.h>
+// using signal()
+typedef void (*sighandler_t) (int);
+sighandler_t signal(int signum, sighandler_t handler);
+The system call signal() would call the registered handler upon
+generation of signal as mentioned in signum. The handler can be
+either one of the SIG_IGN (Ignoring the Signal), SIG_DFL
+(Setting signal back to default mechanism) or
+user-defined signal handler or function address.
+This system call on success returns the address of a function that
+takes an integer argument and has no return value.
+This call returns SIG_ERR in case of error.
+Dr. Pradeep K V CSE1004 - Network Programming 82/ 101
+Signal Handling II
+Though with signal() the respective signal handler as registered by
+the user can be called, fine tuning such as masking the signals that
+should be blocked, modifying the behavior of a signal, and other
+functionalities are not possible. All this can be in sigaction() call.
+// using sigaction()
+int sigaction(int signum, const struct sigaction *act,
+struct sigaction *oldact);
+This system call is used to either examine or change a signal action.
+If the "act" is not null, the new action for signal signum is installed.
+If "oldact" is not null, the previous action is saved in oldact.
+The "sigaction" structure contains the following fields :
+Field-1 : Handler mentioned either in "sa_handler" or "sa_sigaction"
+void (*sa_handler)(int);
+- specifies the action to be performed based on the signum
+Dr. Pradeep K V CSE1004 - Network Programming 83/ 101
+Signal Handling III
+void (*sa_sigaction)(int, siginfo_t *, void *);
+- specifies the signal number as the first argument,
+pointer to siginfo_t structure as the second argument and
+pointer to user context (check getcontext() or setcontext()
+for further details) as the third argument.
+The structure siginfo_t contains signal information
+such as the signal number to be delivered, signal value,
+process id, real user id of sending process, etc.
+Field 2 : Set of signals to be blocked.
+int sa_mask;
+- specifies the mask of signals that should be blocked
+during the execution of signal handler.
+Field 3 : Special flags.
+int sa_flags; // modify the behavior of the signal.
+Dr. Pradeep K V CSE1004 - Network Programming 84/ 101
+Signal Handling IV
+Field 4 : Restore handler.
+void (*sa_restorer) (void);
+- It returns 0 on success and -1 in case of failure.
+Example :
+#include <stdio.h>
+int main() {
+int result, v1, v2;
+v1 = 121; v2 = 0;
+result = v1/v2;
+printf("Result of Divide by Zero is %d\n", result);
+return 0;
+}
+Dr. Pradeep K V CSE1004 - Network Programming 85/ 101
+Signal Handling V
+/* signal_fpe_handler.c */
+#include <stdio.h>
+#include <signal.h>
+#include <stdlib.h>
+void handler_dividebyzero(int signum);
+int main() {
+int result;
+int v1, v2;
+void (*sigHandlerReturn)(int);
+sigHandlerReturn = signal(SIGFPE, handler_dividebyzero);
+if (sigHandlerReturn == SIG_ERR) {
+perror("Signal Error: ");
+return 1;
+}
+v1 = 121;
+v2 = 0;
+result = v1/v2;
+Dr. Pradeep K V CSE1004 - Network Programming 86/ 101
+Signal Handling VI
+printf("Result of Divide by Zero is %d\n", result);
+return 0;
+}
+void handler_dividebyzero(int signum) {
+if (signum == SIGFPE) {
+printf("Received SIGFPE, Divide by Zero Exception\n");
+exit (0);
+}
+else
+printf("Received %d Signal\n", signum);
+return;
+}
+Dr. Pradeep K V CSE1004 - Network Programming 87/ 101
+Signal Handling VII
+Assume that we have raised a signal using raise(), what happens then? After
+raising the signal, the execution of the current process is stopped. Then what
+happens to the stopped process?. There can be two scenarios –
+• First, continue the execution whenever required. (SIGCONT)
+• Second, terminate (with kill command) the process.(SIGSTOP)
+/* signal_raise.c */
+#include <stdio.h>
+#include <signal.h>
+#include <stdlib.h>
+int main() {
+printf("Testing SIGSTOP\n");
+raise(SIGSTOP);
+return 0;
+}
+Dr. Pradeep K V CSE1004 - Network Programming 88/ 101
+Signal Handling VIII
+/* signal_stop_continue.c */
+#include <stdio.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <unistd.h>
+void handler_sigtstp(int signum);
+int main() {
+pid_t pid;
+printf("Testing SIGSTOP\n");
+pid = getpid();
+printf("Open Another Terminal and issue following command\n");
+printf("kill -SIGCONT %d or kill -CONT %d or kill -18 %d\n",
+pid, pid, pid);
+raise(SIGSTOP);
+printf("Received signal SIGCONT\n");
+return 0;
+}
+Dr. Pradeep K V CSE1004 - Network Programming 89/ 101
+Signal Handling IX
+First Terminal
+Second Terminal
+Dr. Pradeep K V CSE1004 - Network Programming 90/ 101
+Signal Handling X
+/* signal_raising_handling.c */
+#include <stdio.h>
+#include <signal.h>
+#include <stdlib.h>
+void handler_sigtstp(int signum);
+int main() {
+void (*sigHandlerReturn)(int);
+sigHandlerReturn = signal(SIGTSTP, handler_sigtstp);
+if (sigHandlerReturn == SIG_ERR) {
+perror("Signal Error: ");
+return 1;
+}
+printf("Testing SIGTSTP\n");
+raise(SIGTSTP);
+return 0;
+}
+Dr. Pradeep K V CSE1004 - Network Programming 91/ 101
+Signal Handling XI
+void handler_sigtstp(int signum) {
+if (signum == SIGTSTP) {
+printf("Received SIGTSTP\n");
+exit(0);
+}
+else
+printf("Received %d Signal\n", signum);
+return;
+}
+Dr. Pradeep K V CSE1004 - Network Programming 92/ 101
+Signal Handling XII
+/* signal_raising_ignoring.c */
+#include <stdio.h>
+#include <signal.h>
+#include <stdlib.h>
+void handler_sigtstp(int signum);
+int main() {
+void (*sigHandlerReturn)(int);
+sigHandlerReturn = signal(SIGTSTP, SIG_IGN);
+if (sigHandlerReturn == SIG_ERR) {
+perror("Signal Error: ");
+return 1;
+}
+printf("Testing SIGTSTP\n");
+raise(SIGTSTP);
+printf("Signal SIGTSTP is ignored\n");
+return 0;
+}
+Dr. Pradeep K V CSE1004 - Network Programming 93/ 101
+Signal Handling XIII
+Dr. Pradeep K V CSE1004 - Network Programming 94/ 101
+IPC Commands in Linux I
+ipcs : shows information on the inter-process communication facilities for
+which the calling process has read access.
+By default, it shows information about all three resources: shared memory
+segments, message queues, and semaphore arrays.
+Without options, the information shall be written in short format for message
+queues, shared memory segments, and semaphore sets that are currently active
+in the system. Otherwise, the information that is displayed is controlled by the
+options specified.
+Options :
+-q : Write information about active message queues.
+-m : Write information about active shared memory segments.
+-s : Write information about active semaphore sets.
+-a : Use all print options. (This is a shorthand notation for -b, -c, -o, -p,
+and -t.)
+Dr. Pradeep K V CSE1004 - Network Programming 95/ 101
+IPC Commands in Linux II
+-b : Write information on maximum allowable size. (Maximum number of
+bytes in messages on queue for message queues, size of segments for
+shared memory, and number of semaphores in each set for semaphores.)
+-c : Write creator’s user name and group name;.
+-o : Write information on outstanding usage. (Number of messages on
+queue and total number of bytes in messages on queue for message
+queues, and number of processes attached to shared memory segments.)
+-p : Write process number information. (Process ID of the last process to
+send a message and process ID of the last process to receive a message on
+message queues, process ID of the creating process, and process ID of the
+last process to attach or detach on shared memory segments.)
+-t : Write time information. (Time of the last control operation that
+changed the access permissions for all facilities, time of the last msgsnd()
+and msgrcv() operations on message queues, time of the last shmat() and
+shmdt() operations on shared memory, and time of the last semop()
+operation on semaphores.)
+Dr. Pradeep K V CSE1004 - Network Programming 96/ 101
+Examples I
+ipcs -a : It provides details about message queue, semaphore and shared
+memory. All the IPC facility has unique key and identifier, which is used to
+identify an IPC facility.
+ipcs -q : It lists message queues for which the current process has read
+access.
+ipcs -s : To list the accessible semaphores.
+ipcs -m : To lists the shared memories.
+ipcs -m -l : To get the system limits for each ipc facility.
+ipcs -l : To get the limits for all three IPC facilities.
+ipcs -m -c : To list creator userid and groupid and owner userid and group
+id.
+ipcs -m -p : To displays creator id, and process id which accessed the
+corresponding ipc facility very recently.
+ipcs -s -t : To get the last operation time in each ipc facility.
+ipcs -u : To display current usage for all the IPC facility.
